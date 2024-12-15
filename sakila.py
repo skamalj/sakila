@@ -25,17 +25,17 @@ def get_system_instructions():
 # @! add tool to search for given movie name on internet and provide synopsis using llm provider=google
 
 @tool
-def get_movie_synopsis(movie_title: str) -> str:
+def get_movie_synopsis(google_search_string: str, prompt_for_llm_for_detailed_movie_summary: str) -> str:
     """Searches for a movie synopsis using Google Search and an LLM."""
     try:
         search = GoogleSearchAPIWrapper()
-        results = search.results(f"{movie_title} movie synopsis", 5)
+        results = search.results(f"{google_search_string}", 5)
         
         if results:
             llm = OpenAI(temperature=0)
             # Combine snippets from search results into a single prompt
             snippets = " ".join(result['snippet'] for result in results)
-            prompt = f"Provide a concise synopsis for the movie '{movie_title}' based on the following information:\n\n{snippets}"
+            prompt = f"{prompt_for_llm_for_detailed_movie_summary} :\n\n{snippets}"
             
             # Use the LLM to generate a summary
             synopsis = llm.invoke(prompt)
@@ -128,6 +128,10 @@ app = workflow.compile()
 
 # Example usage
 for chunk in app.stream(
-    {"messages": [("human", "find who rente gleaming jaw moview most, find its ID  and then provide its summary?")]}, stream_mode="values"
+    {"messages": [("human", "find who rented pelicn moview least, if more than one match then pick any one?"), 
+                  ("human", "Tell me this customers name?"),
+                  ("human", "Now find what other movies were rented by this user?"),
+                  ("human", "Which movie was rented most by this user?"),
+                  ("human", "give me synopsis of this movie?")]}, stream_mode="values"
 ):
     chunk["messages"][-1].pretty_print()

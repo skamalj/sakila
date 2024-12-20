@@ -8,6 +8,7 @@ from langchain_anthropic import ChatAnthropic
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langchain_google_community import GoogleSearchAPIWrapper
 from langchain_openai import OpenAI, ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 
 # Function to get system instructions with the database schema
 def get_system_instructions():
@@ -80,13 +81,16 @@ def execute_sql(sql_statement: str) -> str:
         return json.dumps({"error": str(e)})
 
 # Define tools and ToolNode
-tools = [execute_sql, get_movie_synopsis, verify_sql_with_prompt]
+tools = [execute_sql, get_movie_synopsis]
 tool_node = ToolNode(tools)
 
 # Bind tools to the model
-model_with_tools = ChatOpenAI(
-    model="gpt-4o", temperature=0
-).bind_tools(tools)
+#model_with_tools = ChatOpenAI(
+#    model="gpt-4", temperature=0
+#).bind_tools(tools)
+
+# Bind tools to the model
+model_with_tools = ChatAnthropic(model="claude-3-5-sonnet-latest").bind_tools(tools)
 
 # Node to call the system instructions
 def call_get_system_instruction(state: MessagesState):
@@ -128,7 +132,7 @@ app = workflow.compile()
 
 # Example usage
 for chunk in app.stream(
-    {"messages": [("human", "find who rented pelicn moview least, if more than one match then pick any one?"), 
+    {"messages": [("human", "find who rented everyne moview least, pick just one movie first, if more than one match then pick any one?"), 
                   ("human", "Tell me this customers name?"),
                   ("human", "Now find what other movies were rented by this user?"),
                   ("human", "Which movie was rented most by this user?"),

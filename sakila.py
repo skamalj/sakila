@@ -8,6 +8,7 @@ from langchain_anthropic import ChatAnthropic
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langchain_google_community import GoogleSearchAPIWrapper
 from langchain_openai import OpenAI, ChatOpenAI
+from langgraph.types import interrupt
 from langchain_anthropic import ChatAnthropic
 
 # Function to get system instructions with the database schema
@@ -80,6 +81,14 @@ def execute_sql(sql_statement: str) -> str:
     except Exception as e:
         return json.dumps({"error": str(e)})
 
+@tool
+def ask_human(question_for_user):
+    """
+    This tool can be used to get user input or confirmation.
+    """
+    response = input(question_for_user)
+    return {"human_response": response}
+
 # Define tools and ToolNode
 tools = [execute_sql, get_movie_synopsis]
 tool_node = ToolNode(tools)
@@ -132,7 +141,7 @@ app = workflow.compile()
 
 # Example usage
 for chunk in app.stream(
-    {"messages": [("human", "find who rented everyne moview least, pick just one movie first, if more than one match then pick any one?"), 
+    {"messages": [("human", "find who rented 'curain vidotap' moview least, if more than one match then pick any one?"), 
                   ("human", "Tell me this customers name?"),
                   ("human", "Now find what other movies were rented by this user?"),
                   ("human", "Which movie was rented most by this user?"),

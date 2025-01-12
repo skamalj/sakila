@@ -4,19 +4,31 @@ from langgraph.prebuilt import ToolNode
 import json
 import mysql.connector
 import os
-from langchain_anthropic import ChatAnthropic
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langchain_google_community import GoogleSearchAPIWrapper
 from langchain_openai import OpenAI, ChatOpenAI
 from langgraph.types import interrupt
 from langchain_anthropic import ChatAnthropic
+from langgraph.pregel import RetryPolicy
+import random
+
+class NoDataFound(Exception):
+    """Exception raised when no data is found for a query."""
+
+class SystemInstructionsNotRead(Exception):
+    """Exception raised when system instructions are not found."""
 
 # Function to get system instructions with the database schema
 def get_system_instructions():
     """Provide database schema to help generate SQL statements."""
     schema_path = 'schema.txt'
+
+    # Simulate a chance of failure for testing retries on node failure
+    if random.random() < 0.75: 
+        raise SystemInstructionsNotRead("Error: Failed to read system instructions.")
+    
     if not os.path.exists(schema_path):
-        return "Error: schema.txt file not found."
+        raise SystemInstructionsNotRead("Error: schema.txt file not found.")
     
     with open(schema_path, 'r') as file:
         schema = file.read()
@@ -77,9 +89,12 @@ def execute_sql(sql_statement: str) -> str:
         results = cursor.fetchall()
         cursor.close()
         conn.close()
+        if not results:
+            raise NoDataFound(f"No data found for the query: {sql_statement}")
         return json.dumps(results)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+    except Exception as e:      
+        #print(json.dumps({"error": str(e)}))
+        raise e
 
 @tool
 def ask_human(question_for_user):
@@ -94,12 +109,10 @@ tools = [execute_sql, get_movie_synopsis]
 tool_node = ToolNode(tools)
 
 # Bind tools to the model
-#model_with_tools = ChatOpenAI(
-#    model="gpt-4", temperature=0
-#).bind_tools(tools)
+model_with_tools = ChatOpenAI(model="gpt-4o", temperature=0).bind_tools(tools)
 
 # Bind tools to the model
-model_with_tools = ChatAnthropic(model="claude-3-5-sonnet-latest").bind_tools(tools)
+#model_with_tools = ChatAnthropic(model="claude-3-5-sonnet-latest").bind_tools(tools)
 
 # Node to call the system instructions
 def call_get_system_instruction(state: MessagesState):
@@ -122,13 +135,16 @@ def should_continue(state: MessagesState):
         return "tools"
     return END
 
+def custom_retry_on(exception: Exception) -> bool:
+    print(f"Retrying on exception: {exception}")
+    return True
 # Workflow definition
 workflow = StateGraph(MessagesState)
 
 # Add nodes to the workflow
-workflow.add_node("get_system_instruction", call_get_system_instruction)
+workflow.add_node("get_system_instruction", call_get_system_instruction, retry=RetryPolicy(retry_on=custom_retry_on, max_attempts=10))
 workflow.add_node("agent", call_model)
-workflow.add_node("tools", tool_node)
+workflow.add_node("tools", tool_node )
 
 # Define edges and transitions
 workflow.add_edge(START, "get_system_instruction")
@@ -141,7 +157,7 @@ app = workflow.compile()
 
 # Example usage
 for chunk in app.stream(
-    {"messages": [("human", "find who rented 'curain vidotap' moview least, if more than one match then pick any one?"), 
+    {"messages": [("human", "find who rented 'secetary roge' movie least, if more than one match then pick any one?"), 
                   ("human", "Tell me this customers name?"),
                   ("human", "Now find what other movies were rented by this user?"),
                   ("human", "Which movie was rented most by this user?"),
